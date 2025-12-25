@@ -58,7 +58,7 @@ def set_scope(scope: str) -> None:
         TOKEN_FILE.unlink()
 
 
-def get_credentials() -> Optional[Credentials]:
+def get_credentials(manual: bool = False) -> Optional[Credentials]:
     """Get or refresh OAuth credentials."""
     creds = None
     scope = get_current_scope()
@@ -75,7 +75,31 @@ def get_credentials() -> Optional[Credentials]:
             if not CLIENT_SECRETS_FILE.exists():
                 return None
             flow = InstalledAppFlow.from_client_secrets_file(str(CLIENT_SECRETS_FILE), scopes)
-            creds = flow.run_local_server(port=0)
+
+            if manual:
+                # Manual flow for headless/remote servers
+                flow.redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
+                auth_url, _ = flow.authorization_url(prompt='consent')
+
+                print("\n" + "="*70)
+                print("MANUAL AUTHENTICATION REQUIRED")
+                print("="*70)
+                print("\n1. Open this URL in your browser:\n")
+                print(f"   {auth_url}\n")
+                print("2. Complete the authorization flow")
+                print("3. Copy the authorization code\n")
+
+                auth_code = input("Enter the authorization code: ").strip()
+
+                if not auth_code:
+                    print("Error: No authorization code provided.")
+                    return None
+
+                flow.fetch_token(code=auth_code)
+                creds = flow.credentials
+            else:
+                # Automatic flow with local server
+                creds = flow.run_local_server(port=0)
 
         CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
         with open(TOKEN_FILE, "wb") as token:
@@ -349,7 +373,8 @@ def cmd_auth(args):
     if TOKEN_FILE.exists():
         TOKEN_FILE.unlink()
 
-    creds = get_credentials()
+    manual = getattr(args, 'manual', False)
+    creds = get_credentials(manual=manual)
     if creds and creds.valid:
         print("Authentication successful!")
         print(f"Scope: {get_current_scope()}")
@@ -498,6 +523,7 @@ def main():
 
     # Auth command
     auth_parser = subparsers.add_parser("auth", help="Authenticate with Gmail")
+    auth_parser.add_argument("--manual", action="store_true", help="Manual auth for headless/remote servers")
 
     # Scope command
     scope_parser = subparsers.add_parser("scope", help="View or change API scope")

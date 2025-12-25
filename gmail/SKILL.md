@@ -84,11 +84,19 @@ Create `~/.gmail_credentials/credentials.json`:
 
 #### 8. Authenticate
 
+**For local machines (WSL, Linux desktop):**
 ```bash
 python3 scripts/gmail_search.py auth
 ```
 
 This opens a browser. Click through the "unverified app" warning ("Advanced" -> "Go to Gmail Agent Skill"), approve access, and you're ready.
+
+**For remote/headless servers:**
+```bash
+python3 scripts/gmail_search.py auth --manual
+```
+
+This prints a URL. Open it in your local browser, complete authorization, copy the code, and paste it back into the terminal.
 
 ## Quick Start
 
@@ -119,11 +127,21 @@ python3 scripts/gmail_search.py setup --json
 
 ### Authenticate
 
-Authenticate with Gmail (opens browser for OAuth):
+Authenticate with Gmail using OAuth:
 
 ```bash
+# Automatic (opens browser) - for local machines
 python3 scripts/gmail_search.py auth
+
+# Manual (prints URL) - for remote/headless servers
+python3 scripts/gmail_search.py auth --manual
 ```
+
+**When to use `--manual`:**
+- Remote servers without GUI
+- SSH sessions
+- Headless Ubuntu servers
+- Any environment where browser auto-launch fails
 
 ### Scope
 
