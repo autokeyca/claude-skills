@@ -1,0 +1,7 @@
+# Virtual environment
+venv/
+__pycache__/
+*.pyc
+
+# Don't track credentials in test folder
+.gmail_credentials/

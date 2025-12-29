@@ -11,8 +11,11 @@ import base64
 import json
 import os
 import pickle
+import re
 import sys
 from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Optional
 
@@ -38,7 +41,8 @@ SCOPES_MAP = {
     "full": ["https://mail.google.com/"],
 }
 
-DEFAULT_SCOPE = "readonly"
+# Default scope changed to 'modify' to support sending emails, creating drafts, and replying
+DEFAULT_SCOPE = "modify"
 
 
 def get_current_scope() -> str:
@@ -561,6 +565,316 @@ def cmd_labels(args):
         sys.exit(1)
 
 
+def validate_email(email: str) -> bool:
+    """Validate email address format."""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email.strip()) is not None
+
+
+def create_message(
+    to: str,
+    subject: str,
+    body: str,
+    from_addr: str = "me",
+    cc: str = "",
+    bcc: str = "",
+    html: bool = False,
+    in_reply_to: str = "",
+    references: str = "",
+    thread_id: str = "",
+) -> dict:
+    """Create a MIME message for Gmail API.
+
+    Args:
+        to: Recipient email address (required)
+        subject: Email subject (required)
+        body: Email body content (required)
+        from_addr: Sender email (default: "me")
+        cc: CC recipients (comma-separated)
+        bcc: BCC recipients (comma-separated)
+        html: Whether body is HTML (default: False for plain text)
+        in_reply_to: Message-ID of message being replied to
+        references: Message-ID references for threading
+        thread_id: Gmail thread ID for replies
+
+    Returns:
+        Dictionary with 'raw' and optionally 'threadId' for Gmail API
+    """
+    # Create message container
+    if html:
+        message = MIMEMultipart('alternative')
+        part = MIMEText(body, 'html')
+        message.attach(part)
+    else:
+        message = MIMEText(body, 'plain')
+
+    # Set headers
+    message['To'] = to
+    message['From'] = from_addr
+    message['Subject'] = subject
+
+    if cc:
+        message['Cc'] = cc
+    if bcc:
+        message['Bcc'] = bcc
+
+    # Add reply headers for threading
+    if in_reply_to:
+        message['In-Reply-To'] = in_reply_to
+    if references:
+        message['References'] = references
+
+    # Encode message
+    raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+
+    result = {'raw': raw_message}
+
+    # Add thread ID if this is a reply
+    if thread_id:
+        result['threadId'] = thread_id
+
+    return result
+
+
+def get_message_for_reply(service, msg_id: str) -> dict:
+    """Get message details needed for creating a reply.
+
+    Returns dict with: subject, to, thread_id, message_id, references
+    """
+    msg = service.users().messages().get(
+        userId="me",
+        id=msg_id,
+        format="metadata",
+        metadataHeaders=["From", "To", "Subject", "Message-ID", "References"]
+    ).execute()
+
+    headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+
+    # Extract original sender for reply-to
+    original_from = headers.get("From", "")
+    # Parse email from "Name <email@domain.com>" format
+    email_match = re.search(r'<(.+?)>', original_from)
+    reply_to = email_match.group(1) if email_match else original_from
+
+    # Get subject and add Re: if not already present
+    original_subject = headers.get("Subject", "(no subject)")
+    if not original_subject.lower().startswith("re:"):
+        subject = f"Re: {original_subject}"
+    else:
+        subject = original_subject
+
+    # Build References header for proper threading
+    message_id = headers.get("Message-ID", "")
+    existing_refs = headers.get("References", "")
+
+    if existing_refs and message_id:
+        references = f"{existing_refs} {message_id}"
+    elif message_id:
+        references = message_id
+    else:
+        references = ""
+
+    return {
+        "to": reply_to,
+        "subject": subject,
+        "thread_id": msg.get("threadId"),
+        "message_id": message_id,
+        "references": references,
+    }
+
+
+def cmd_send(args):
+    """Send an email."""
+    creds = get_credentials()
+    if not creds:
+        print("Not authenticated. Run 'setup' or 'auth' first.")
+        sys.exit(1)
+
+    # Validate required fields
+    if not args.to:
+        print("Error: --to is required")
+        sys.exit(1)
+
+    if not validate_email(args.to):
+        print(f"Error: Invalid email address: {args.to}")
+        sys.exit(1)
+
+    # Validate CC/BCC if provided
+    if args.cc:
+        for email in args.cc.split(','):
+            if not validate_email(email):
+                print(f"Error: Invalid CC email address: {email.strip()}")
+                sys.exit(1)
+
+    if args.bcc:
+        for email in args.bcc.split(','):
+            if not validate_email(email):
+                print(f"Error: Invalid BCC email address: {email.strip()}")
+                sys.exit(1)
+
+    if not args.subject:
+        print("Error: --subject is required")
+        sys.exit(1)
+
+    if not args.body:
+        print("Error: --body is required")
+        sys.exit(1)
+
+    service = build("gmail", "v1", credentials=creds)
+
+    try:
+        # Create message
+        message = create_message(
+            to=args.to,
+            subject=args.subject,
+            body=args.body,
+            cc=args.cc or "",
+            bcc=args.bcc or "",
+            html=args.html,
+        )
+
+        # Send message
+        result = service.users().messages().send(userId="me", body=message).execute()
+
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"✓ Email sent successfully!")
+            print(f"Message ID: {result['id']}")
+            print(f"Thread ID: {result['threadId']}")
+            print(f"To: {args.to}")
+            if args.cc:
+                print(f"CC: {args.cc}")
+            if args.bcc:
+                print(f"BCC: {args.bcc}")
+            print(f"Subject: {args.subject}")
+
+    except HttpError as e:
+        print(f"Gmail API error: {e}")
+        sys.exit(1)
+
+
+def cmd_draft(args):
+    """Create an email draft."""
+    creds = get_credentials()
+    if not creds:
+        print("Not authenticated. Run 'setup' or 'auth' first.")
+        sys.exit(1)
+
+    # Validate required fields
+    if not args.to:
+        print("Error: --to is required")
+        sys.exit(1)
+
+    if not validate_email(args.to):
+        print(f"Error: Invalid email address: {args.to}")
+        sys.exit(1)
+
+    # Validate CC/BCC if provided
+    if args.cc:
+        for email in args.cc.split(','):
+            if not validate_email(email):
+                print(f"Error: Invalid CC email address: {email.strip()}")
+                sys.exit(1)
+
+    if args.bcc:
+        for email in args.bcc.split(','):
+            if not validate_email(email):
+                print(f"Error: Invalid BCC email address: {email.strip()}")
+                sys.exit(1)
+
+    if not args.subject:
+        print("Error: --subject is required")
+        sys.exit(1)
+
+    if not args.body:
+        print("Error: --body is required")
+        sys.exit(1)
+
+    service = build("gmail", "v1", credentials=creds)
+
+    try:
+        # Create message
+        message = create_message(
+            to=args.to,
+            subject=args.subject,
+            body=args.body,
+            cc=args.cc or "",
+            bcc=args.bcc or "",
+            html=args.html,
+        )
+
+        # Create draft
+        draft = {'message': message}
+        result = service.users().drafts().create(userId="me", body=draft).execute()
+
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"✓ Draft created successfully!")
+            print(f"Draft ID: {result['id']}")
+            print(f"Message ID: {result['message']['id']}")
+            print(f"To: {args.to}")
+            if args.cc:
+                print(f"CC: {args.cc}")
+            if args.bcc:
+                print(f"BCC: {args.bcc}")
+            print(f"Subject: {args.subject}")
+
+    except HttpError as e:
+        print(f"Gmail API error: {e}")
+        sys.exit(1)
+
+
+def cmd_reply(args):
+    """Reply to an email."""
+    creds = get_credentials()
+    if not creds:
+        print("Not authenticated. Run 'setup' or 'auth' first.")
+        sys.exit(1)
+
+    if not args.message_id:
+        print("Error: message_id is required")
+        sys.exit(1)
+
+    if not args.body:
+        print("Error: --body is required")
+        sys.exit(1)
+
+    service = build("gmail", "v1", credentials=creds)
+
+    try:
+        # Get original message details for proper threading
+        original = get_message_for_reply(service, args.message_id)
+
+        # Create reply message
+        message = create_message(
+            to=original["to"],
+            subject=original["subject"],
+            body=args.body,
+            html=args.html,
+            in_reply_to=original["message_id"],
+            references=original["references"],
+            thread_id=original["thread_id"],
+        )
+
+        # Send reply
+        result = service.users().messages().send(userId="me", body=message).execute()
+
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"✓ Reply sent successfully!")
+            print(f"Message ID: {result['id']}")
+            print(f"Thread ID: {result['threadId']}")
+            print(f"To: {original['to']}")
+            print(f"Subject: {original['subject']}")
+
+    except HttpError as e:
+        print(f"Gmail API error: {e}")
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Gmail Search Skill")
     subparsers = parser.add_subparsers(dest="command", help="Commands")
@@ -604,6 +918,33 @@ def main():
     labels_parser = subparsers.add_parser("labels", help="List labels")
     labels_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # Send command
+    send_parser = subparsers.add_parser("send", help="Send an email")
+    send_parser.add_argument("--to", required=True, help="Recipient email address")
+    send_parser.add_argument("--subject", required=True, help="Email subject")
+    send_parser.add_argument("--body", required=True, help="Email body")
+    send_parser.add_argument("--cc", help="CC recipients (comma-separated)")
+    send_parser.add_argument("--bcc", help="BCC recipients (comma-separated)")
+    send_parser.add_argument("--html", action="store_true", help="Body is HTML (default: plain text)")
+    send_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # Draft command
+    draft_parser = subparsers.add_parser("draft", help="Create an email draft")
+    draft_parser.add_argument("--to", required=True, help="Recipient email address")
+    draft_parser.add_argument("--subject", required=True, help="Email subject")
+    draft_parser.add_argument("--body", required=True, help="Email body")
+    draft_parser.add_argument("--cc", help="CC recipients (comma-separated)")
+    draft_parser.add_argument("--bcc", help="BCC recipients (comma-separated)")
+    draft_parser.add_argument("--html", action="store_true", help="Body is HTML (default: plain text)")
+    draft_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # Reply command
+    reply_parser = subparsers.add_parser("reply", help="Reply to an email")
+    reply_parser.add_argument("message_id", help="Message ID to reply to")
+    reply_parser.add_argument("--body", required=True, help="Reply body")
+    reply_parser.add_argument("--html", action="store_true", help="Body is HTML (default: plain text)")
+    reply_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
     args = parser.parse_args()
 
     if args.command == "setup":
@@ -618,6 +959,12 @@ def main():
         cmd_download(args)
     elif args.command == "labels":
         cmd_labels(args)
+    elif args.command == "send":
+        cmd_send(args)
+    elif args.command == "draft":
+        cmd_draft(args)
+    elif args.command == "reply":
+        cmd_reply(args)
     else:
         parser.print_help()
 

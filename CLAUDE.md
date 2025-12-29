@@ -30,9 +30,10 @@ skill-name/
 ### Current Skills
 
 **Gmail Skill** (`gmail/`)
-- Gmail API integration for searching, reading, and downloading emails
-- OAuth2 authentication with configurable scopes (readonly/modify/full)
-- Supports Gmail search syntax with helper flags
+- Gmail API integration for searching, reading, sending, replying to, and managing emails
+- Send emails, create drafts, reply to messages with proper threading
+- OAuth2 authentication with configurable scopes (readonly/modify/full, default: modify)
+- Supports Gmail search syntax with helper flags, HTML formatting, CC/BCC
 - Main entry point: `gmail/scripts/gmail_search.py`
 
 ## Development Commands
@@ -56,7 +57,16 @@ python3 gmail/scripts/gmail_search.py download MESSAGE_ID
 # List labels
 python3 gmail/scripts/gmail_search.py labels
 
-# Change permission scope
+# Send email
+python3 gmail/scripts/gmail_search.py send --to EMAIL --subject "SUBJECT" --body "MESSAGE" [--cc EMAIL] [--bcc EMAIL] [--html]
+
+# Create draft
+python3 gmail/scripts/gmail_search.py draft --to EMAIL --subject "SUBJECT" --body "MESSAGE" [--cc EMAIL] [--bcc EMAIL] [--html]
+
+# Reply to email (maintains thread)
+python3 gmail/scripts/gmail_search.py reply MESSAGE_ID --body "REPLY" [--html]
+
+# Change permission scope (default: modify)
 python3 gmail/scripts/gmail_search.py scope --set [readonly|modify|full]
 ```
 
