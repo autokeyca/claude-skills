@@ -1,11 +1,11 @@
 ---
 name: gmail
-description: This skill should be used when searching, fetching, or downloading emails from Gmail. Use for queries like "search Gmail for...", "find emails from John", "show unread emails", "emails about project X", or "download attachment from email".
+description: This skill should be used when searching, fetching, downloading, sending, or replying to emails in Gmail. Use for queries like "search Gmail for...", "find emails from John", "show unread emails", "send email to...", "create draft email", "reply to that email", or "download attachment from email".
 ---
 
-# Gmail Search Skill
+# Gmail Skill
 
-Search and fetch emails via Gmail API with flexible query options and output formats.
+Search, send, reply to, and manage emails via Gmail API with flexible query options and output formats.
 
 ## Prerequisites
 
@@ -158,8 +158,8 @@ python3 scripts/gmail_search.py scope --set full
 ```
 
 **Available scopes:**
-- `readonly` - Read emails only (default, recommended)
-- `modify` - Read + modify labels, mark read/unread
+- `readonly` - Read emails only
+- `modify` - Read, send, reply, and modify labels (default)
 - `full` - Full access including delete
 
 ### Search
@@ -229,6 +229,124 @@ List all available Gmail labels:
 python3 scripts/gmail_search.py labels
 python3 scripts/gmail_search.py labels --json
 ```
+
+### Send Email
+
+Send a new email:
+
+```bash
+# Basic send
+python3 scripts/gmail_search.py send \
+  --to "recipient@example.com" \
+  --subject "Meeting Tomorrow" \
+  --body "Let's meet at 10am in the conference room."
+
+# With CC and BCC
+python3 scripts/gmail_search.py send \
+  --to "john@example.com" \
+  --subject "Project Update" \
+  --body "Here's the latest update..." \
+  --cc "boss@company.com,team@company.com" \
+  --bcc "archive@company.com"
+
+# HTML email
+python3 scripts/gmail_search.py send \
+  --to "recipient@example.com" \
+  --subject "Newsletter" \
+  --body "<h1>Welcome</h1><p>This is an HTML email.</p>" \
+  --html
+
+# JSON output
+python3 scripts/gmail_search.py send \
+  --to "test@example.com" \
+  --subject "Test" \
+  --body "Test message" \
+  --json
+```
+
+**Options:**
+- `--to` (required) - Recipient email address
+- `--subject` (required) - Email subject
+- `--body` (required) - Email body content
+- `--cc` (optional) - CC recipients (comma-separated)
+- `--bcc` (optional) - BCC recipients (comma-separated)
+- `--html` (optional) - Send as HTML instead of plain text
+- `--json` (optional) - Output as JSON
+
+### Create Draft
+
+Create an email draft without sending:
+
+```bash
+# Basic draft
+python3 scripts/gmail_search.py draft \
+  --to "recipient@example.com" \
+  --subject "Draft Email" \
+  --body "This will be saved as a draft."
+
+# Draft with CC/BCC
+python3 scripts/gmail_search.py draft \
+  --to "john@example.com" \
+  --subject "Review Needed" \
+  --body "Please review the attached document..." \
+  --cc "team@company.com"
+
+# HTML draft
+python3 scripts/gmail_search.py draft \
+  --to "recipient@example.com" \
+  --subject "Formatted Draft" \
+  --body "<p><strong>Important:</strong> Please review.</p>" \
+  --html
+
+# JSON output
+python3 scripts/gmail_search.py draft \
+  --to "test@example.com" \
+  --subject "Test Draft" \
+  --body "Draft message" \
+  --json
+```
+
+**Options:**
+- `--to` (required) - Recipient email address
+- `--subject` (required) - Email subject
+- `--body` (required) - Email body content
+- `--cc` (optional) - CC recipients (comma-separated)
+- `--bcc` (optional) - BCC recipients (comma-separated)
+- `--html` (optional) - Create as HTML draft
+- `--json` (optional) - Output as JSON
+
+### Reply to Email
+
+Reply to an existing email (maintains thread):
+
+```bash
+# Basic reply
+python3 scripts/gmail_search.py reply MESSAGE_ID \
+  --body "Thanks for your email! I'll get back to you soon."
+
+# HTML reply
+python3 scripts/gmail_search.py reply MESSAGE_ID \
+  --body "<p>Thanks for reaching out!</p><p>Best regards</p>" \
+  --html
+
+# JSON output
+python3 scripts/gmail_search.py reply MESSAGE_ID \
+  --body "Reply message" \
+  --json
+```
+
+**How it works:**
+- Automatically fetches the original message details
+- Extracts the sender as the reply recipient
+- Preserves the subject line (adds "Re:" if needed)
+- Maintains email threading with proper headers (In-Reply-To, References)
+- Keeps the conversation in the same thread
+
+**Options:**
+- `MESSAGE_ID` (required) - ID of the message to reply to (from search results)
+- `--body` (required) - Reply message body
+- `--html` (optional) - Send reply as HTML
+- `--json` (optional) - Output as JSON
 
 ## Output Formats
 
@@ -304,6 +422,10 @@ The skill supports Gmail's native search syntax in free-text queries:
 | "What labels do I have?" | `labels` |
 | "Starred emails from boss" | `search --from "boss" --starred` |
 | "Is Gmail configured?" | `setup` |
+| "Send email to john@example.com about the meeting" | `send --to "john@example.com" --subject "Meeting" --body "..."` |
+| "Create a draft email to the team" | `draft --to "team@company.com" --subject "..." --body "..."` |
+| "Reply to that email" | `reply MESSAGE_ID --body "Thanks for your message!"` |
+| "Send HTML email with formatted content" | `send --to "..." --subject "..." --body "<h1>...</h1>" --html` |
 
 ## Dependencies
 

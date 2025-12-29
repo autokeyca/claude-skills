@@ -1,16 +1,19 @@
-# Gmail Search Skill
+# Gmail Skill
 
-Search and fetch emails via Gmail API with flexible query options and output formats.
+Search, send, reply to, and manage emails via Gmail API with flexible query options and output formats.
 
 ## Features
 
-- Free-text search with Gmail query syntax
-- Filter by sender, recipient, subject, label, date range
-- Status filters: unread, starred, has-attachment
-- Download attachments from messages
-- List all labels
-- Configurable OAuth scopes (readonly/modify/full)
-- Output as Markdown (default) or JSON
+- **Search**: Free-text search with Gmail query syntax
+- **Filters**: By sender, recipient, subject, label, date range, status
+- **Send emails**: Send new emails with CC/BCC support
+- **Create drafts**: Save draft emails without sending
+- **Reply**: Reply to emails with proper threading
+- **Attachments**: Download attachments from messages
+- **Labels**: List all available Gmail labels
+- **HTML support**: Send/draft/reply with HTML formatting
+- **Configurable OAuth scopes**: readonly/modify/full (default: modify)
+- **Output formats**: Markdown (default) or JSON
 
 ## Installation
 
@@ -117,6 +120,8 @@ This allows authentication on headless servers, SSH sessions, or any environment
 
 ## Usage
 
+### Search & Read
+
 ```bash
 # Check setup status
 python3 scripts/gmail_search.py setup
@@ -146,15 +151,59 @@ python3 scripts/gmail_search.py download MESSAGE_ID
 python3 scripts/gmail_search.py labels
 ```
 
+### Send & Reply
+
+```bash
+# Send email
+python3 scripts/gmail_search.py send \
+  --to "recipient@example.com" \
+  --subject "Meeting Tomorrow" \
+  --body "Let's meet at 10am in the conference room."
+
+# Send with CC/BCC
+python3 scripts/gmail_search.py send \
+  --to "john@example.com" \
+  --subject "Project Update" \
+  --body "Here's the update..." \
+  --cc "boss@company.com,team@company.com" \
+  --bcc "archive@company.com"
+
+# Send HTML email
+python3 scripts/gmail_search.py send \
+  --to "recipient@example.com" \
+  --subject "Newsletter" \
+  --body "<h1>Welcome</h1><p>HTML content here</p>" \
+  --html
+
+# Create draft
+python3 scripts/gmail_search.py draft \
+  --to "recipient@example.com" \
+  --subject "Draft Email" \
+  --body "This will be saved as a draft."
+
+# Reply to email (maintains thread)
+python3 scripts/gmail_search.py reply MESSAGE_ID \
+  --body "Thanks for your email! I'll get back to you soon."
+
+# Reply with HTML
+python3 scripts/gmail_search.py reply MESSAGE_ID \
+  --body "<p>Thanks!</p><p>Best regards</p>" \
+  --html
+```
+
 ## Scopes
 
 Change permission level:
 
 ```bash
-python3 scripts/gmail_search.py scope --set readonly   # Read only (default)
-python3 scripts/gmail_search.py scope --set modify     # Read + modify labels
-python3 scripts/gmail_search.py scope --set full       # Full access
+python3 scripts/gmail_search.py scope --set readonly   # Read only
+python3 scripts/gmail_search.py scope --set modify     # Read, send, reply, modify labels (default)
+python3 scripts/gmail_search.py scope --set full       # Full access including delete
 ```
+
+**Default scope:** `modify` - Allows reading, sending, replying, and modifying labels. This is the recommended scope for most use cases.
+
+**Note:** Changing scope requires re-authentication (`python3 scripts/gmail_search.py auth`).
 
 ## Files
 
