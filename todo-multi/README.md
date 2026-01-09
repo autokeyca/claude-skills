@@ -8,7 +8,7 @@ A comprehensive task management system with team collaboration, Telegram bot int
 - Create, update, complete, and delete tasks
 - Urgency levels (High/Medium-High/Medium-Low/Low)
 - Due date tracking with overdue detection
-- Active task designation (focus mode)
+- Multiple active tasks (focus mode) - toggle per task
 - Batch operations (complete/delete multiple tasks at once)
 - Task assignment to team members
 
@@ -130,10 +130,11 @@ SKILL.md is self-sufficient for 90% of operations.
 | Command | Description |
 |---------|-------------|
 | `/tasks` | List all open tasks |
+| `/active` | Show active tasks (grouped by assignee) |
 | `/task add <desc>` | Create new task |
 | `/task done <id>` | Complete task(s) - comma-separated |
 | `/task delete <id>` | Delete task(s) - comma-separated |
-| `/task active <id>` | Set active/focus task |
+| `/task active <id>` | Toggle task active/focus status |
 | `/task today` | Tasks due today |
 | `/task overdue` | Overdue tasks |
 | `/task assign <id> <name>` | Assign to team member |

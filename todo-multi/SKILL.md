@@ -82,6 +82,7 @@ ORDER BY t.IsActive DESC, t.UrgencyLevel, t.DueDate
 | Read | WHERE clause |
 |------|--------------|
 | All incomplete | `t.IsCompleted=0` |
+| Active tasks only | `t.IsActive=1 AND t.IsCompleted=0` |
 | Jerry's tasks | `t.IsCompleted=0 AND (t.CreatedBy=1 OR t.AssignedTo=1)` |
 | Employee's tasks | `t.IsCompleted=0 AND t.AssignedTo=@EmpID` |
 | Completed | `t.IsCompleted=1` *(order by CompletedAt DESC)* |
@@ -123,18 +124,45 @@ UPDATE Tasks SET IsCompleted=1, CompletedAt=GETDATE(), UpdatedAt=GETDATE()
 WHERE TaskID IN (@id1, @id2, @id3) AND (CreatedBy=1 OR AssignedTo=1);
 ```
 
-### Set Active Task
+### Manage Active Tasks
 
-Only one task can be active at a time. Run both queries:
+**Multiple tasks can be active simultaneously.** Use toggle operations:
+
+**Activate a task:**
 ```sql
 USE PA;
--- Clear existing active
-UPDATE Tasks SET IsActive=0, UpdatedAt=GETDATE()
-WHERE (CreatedBy=1 OR AssignedTo=1) AND IsActive=1;
-
--- Set new active
 UPDATE Tasks SET IsActive=1, UpdatedAt=GETDATE()
-WHERE TaskID=@id;
+WHERE TaskID=@id AND (CreatedBy=1 OR AssignedTo=1) AND IsCompleted=0;
+```
+
+**Deactivate a task:**
+```sql
+USE PA;
+UPDATE Tasks SET IsActive=0, UpdatedAt=GETDATE()
+WHERE TaskID=@id AND (CreatedBy=1 OR AssignedTo=1);
+```
+
+**Toggle task active status:**
+```sql
+USE PA;
+-- Check current status first
+SELECT IsActive FROM Tasks WHERE TaskID=@id;
+-- Then toggle
+UPDATE Tasks SET IsActive=CASE WHEN IsActive=1 THEN 0 ELSE 1 END, UpdatedAt=GETDATE()
+WHERE TaskID=@id AND (CreatedBy=1 OR AssignedTo=1);
+```
+
+**Get all active tasks grouped by assignee:**
+```sql
+USE PA;
+SELECT t.TaskID, t.TaskDescription, t.UrgencyLevel, t.DueDate,
+       c.DisplayName AS CreatedBy,
+       COALESCE(a.DisplayName, 'Unassigned') AS AssignedTo
+FROM Tasks t
+JOIN Users c ON t.CreatedBy = c.UserID
+LEFT JOIN Users a ON t.AssignedTo = a.UserID
+WHERE t.IsActive=1 AND t.IsCompleted=0
+ORDER BY a.DisplayName, t.UrgencyLevel, t.DueDate;
 ```
 
 ### Assign Task
@@ -274,7 +302,7 @@ ORDER BY t.UrgencyLevel, t.DueDate;
 1. **Always `USE PA;`** prefix on all queries
 2. **JOIN for DisplayName** — never expose raw UserIDs to users
 3. **Always set `UpdatedAt=GETDATE()`** on all writes
-4. **Only ONE active task** per user (clear first, then set)
+4. **Multiple active tasks** allowed per user (use toggle operations)
 5. **Owner (Jerry) sees all** — others see only own/assigned
 6. **Check Status='active'** when looking up users for assignment
 7. **Batch operations** — use `IN (@id1, @id2, ...)` for multiple IDs
