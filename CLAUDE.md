@@ -36,6 +36,14 @@ skill-name/
 - Supports Gmail search syntax with helper flags, HTML formatting, CC/BCC
 - Main entry point: `gmail/scripts/gmail_search.py`
 
+**ScriptCase Skill** (`scriptcase/`)
+- Manages ScriptCase 9 apps for AutoKey's AKCRM (300 apps) and AKINV (164 apps) projects
+- Direct SQLite database manipulation via SSH to 192.168.1.19
+- Modifies app definitions, field settings, events, cloning, and regeneration
+- Installed system-wide at `~/.claude/skills/scriptcase/` and kept in sync with aura server
+- No executable scripts — uses inline PHP templates sent over SSH
+- References: cloning, events, regeneration, known-issues, database-schema
+
 ## Development Commands
 
 ### Gmail Skill
