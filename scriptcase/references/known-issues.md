@@ -3,7 +3,7 @@
 ## Newlines in fields break ALL buttons (2026-02-09)
 
 **Symptom:** All buttons dead on a form (Save, Convert, etc.)
-**Cause:** `form_encode_input()` injects record values into JS string literals. CR/LF in a text field → JS syntax error → `nm_atualiza` (save function) never defined → all buttons broken.
+**Cause:** `form_encode_input()` injects record values into JS string literals. CR/LF in a text field -> JS syntax error -> `nm_atualiza` (save function) never defined -> all buttons broken.
 **Fix:** Clean the data. Create a trigger to strip CR/LF on INSERT/UPDATE for affected fields.
 **Prevention:** Add SQL triggers for text fields used in Link-type buttons.
 
@@ -11,7 +11,7 @@
 
 **Symptom:** "The record cannot be inserted because these data have been already sent"
 **Cause:** `security_enable_csrf = S` in `sc_tbapl.Attr1` — session token mismatch.
-**Fix:** Set `security_enable_csrf` to `N` in Attr1 (serialized PHP). See SKILL.md app settings pattern.
+**Fix:** Set `security_enable_csrf` to `N` in Attr1 (serialized PHP). See main scriptcase skill for app settings pattern.
 
 ## VARCHAR to DATETIME conversion error
 

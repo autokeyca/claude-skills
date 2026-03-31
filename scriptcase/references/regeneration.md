@@ -9,7 +9,7 @@ After ANY SQLite database change, the app must be regenerated for changes to tak
 1. Open ScriptCase IDE: http://scase.autokey.ca:8092/scriptcase/
 2. Close the app if it's currently open (forces reload from DB)
 3. Reopen the app (this picks up SQLite changes)
-4. Click **Generate** (the gear/play icon) → Deploy
+4. Click **Generate** (the gear/play icon) -> Deploy
 
 This is the ONLY way to regenerate. Jerry must do this step.
 

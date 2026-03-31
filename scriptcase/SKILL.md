@@ -15,6 +15,12 @@ description: Modify, fix, and manage ScriptCase 9 applications for AutoKey's AKC
 - **Projects:** AKCRM (CRM, 300 apps), Inven (Inventory, 164 apps)
 - **MSSQL:** 192.168.1.4, sa / AKR00xx!!@@, databases AKCRM and AKINV
 
+## HARD RULE — Backup Before ANY Modification
+**Before overwriting ANY file, database, or app definition on 192.168.1.19, ALWAYS back it up first.**
+- SQLite DB: `cp nm_scriptcase.db nm_scriptcase.db.bak_$(date +%Y%m%d_%H%M)`
+- Any file: `cp file file.bak_$(date +%Y%m%d_%H%M)`
+- No exceptions — files, forms, configs, the entire DB, everything gets backed up before changes.
+
 ## Architecture
 
 ScriptCase stores ALL app definitions in a SQLite database — not in files. Three core tables:
@@ -41,7 +47,7 @@ For any ScriptCase modification:
 
 ### Modify a field setting (e.g., make read-only, disable update)
 
-Field config lives in serialized PHP in `sc_tbcmp.Attr1`. Use a PHP script on the server:
+Field config lives in serialized PHP in `sc_tbcmp.Attr1`. Use this pattern on the server:
 
 ```bash
 ssh ja@192.168.1.19 "cat > /tmp/sc_work.php << 'ENDPHP'
@@ -124,6 +130,7 @@ After ANY database change, the app must be regenerated. See `references/regenera
 
 ## References
 
+Read these files for detailed information when needed:
 - **`references/cloning.md`** — Backup/clone procedure (read before any modification)
 - **`references/events.md`** — Event system, validation patterns, common events
 - **`references/regeneration.md`** — How to regenerate/deploy after changes

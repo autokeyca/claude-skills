@@ -54,4 +54,4 @@ a:349:{s:12:"autoinc_nome";s:0:"";s:16:"banco_val_forcar";s:1:"N";...}
 - `i:N` = integer N
 - `b:0` / `b:1` = boolean
 
-**Never hand-edit serialized data.** Always use PHP to unserialize → modify → reserialize.
+**Never hand-edit serialized data.** Always use PHP to unserialize -> modify -> reserialize.
