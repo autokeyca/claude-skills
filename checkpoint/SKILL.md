@@ -1,6 +1,6 @@
 ---
 name: cp
-description: Save memories, state, and update project documentation before a context reset. Produces a continuation prompt for seamless resumption.
+description: Save memories, state, and update project documentation before a context reset. Writes pickup.md for automatic resumption via UserPromptSubmit hook.
 disable-model-invocation: true
 user-invocable: true
 allowed-tools: Read Write Edit Glob Grep Agent Bash
@@ -71,3 +71,47 @@ Confirm to the user that `pickup.md` has been written and will be automatically 
 - Do not ask the user questions — just do it
 - If Symphony context is active, note which channel the user was in
 - Complete all steps even if some have no changes needed — confirm each step
+
+---
+
+## How pickup.md Auto-Loading Works
+
+The continuation prompt written by this skill is automatically injected into the next session via a **UserPromptSubmit hook** configured in `~/.claude/settings.json`. There is no reliance on CLAUDE.md instructions for this behavior.
+
+### Hook mechanism
+
+A `UserPromptSubmit` hook runs on every user message. The hook script:
+
+1. Checks if `pickup.md` exists in the current working directory
+2. If **not found**: exits silently with no output (zero token cost)
+3. If **found**: cats the file contents, deletes the file, and outputs a confirmation
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f pickup.md ]; then echo '--- pickup.md context ---'; cat pickup.md; rm pickup.md; echo '--- pickup.md has been read and deleted ---'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Why a hook instead of CLAUDE.md
+
+A CLAUDE.md instruction asks Claude to check for the file, but Claude may not act on it proactively — it's a soft instruction that can be missed. The hook is executed by the harness itself, so the pickup content is injected into the conversation context automatically. Claude cannot miss it.
+
+### Token overhead
+
+None when `pickup.md` doesn't exist. The hook produces no output, so it's invisible to the conversation. Tokens are only consumed when the file is present — which is exactly the one time you need it.
+
+### Setup
+
+This hook must be configured in `~/.claude/settings.json` on each machine where the `/cp` skill is used. The file is deleted after first read, so the hook effectively fires once per checkpoint cycle.
