@@ -1,15 +1,18 @@
 # Claude Skills
 
-A collection of skills and tools for extending Claude's capabilities.
+Custom user-invocable skills for Claude Code. Installed by cloning into `~/.claude/skills/`.
 
-## Purpose
+## Skills
 
-This repository contains custom skills, MCP servers, and related tooling for Claude Code and the Claude Agent SDK.
+- **`autokey-business`** — AutoKey business reference (company profile, customers, systems, agent fleet).
+- **`checkpoint`** (`/cp`) — Save state before a context reset. Writes `pickup.md` + `.pickup-session-id` via an atomic receipt-printing script; auto-injects on next `/clear` via SessionStart hook.
+- **`devblitz`** (`/db`) — Parallel backlog sprint with sub-agents + audit pass before merge.
+- **`scriptcase`** — ScriptCase 9 app maintenance for AutoKey's AKCRM / AKINV projects.
 
-## Structure
+## Install
 
-- `gmail/` - Gmail-related skills and tools
+```bash
+git clone git@github.com:autokeyca/claude-skills.git ~/.claude/skills
+```
 
-## Getting Started
-
-More documentation coming soon as this project develops.
+The `checkpoint` skill additionally needs a SessionStart hook in `~/.claude/settings.json` — see `checkpoint/SKILL.md`.

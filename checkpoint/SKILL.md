@@ -1,6 +1,6 @@
 ---
 name: cp
-description: Save memories, state, and update project documentation before a context reset. Writes pickup.md for automatic resumption via UserPromptSubmit hook.
+description: Save memories, state, and update project documentation before a context reset. Writes pickup.md for automatic resumption via SessionStart hook.
 disable-model-invocation: true
 user-invocable: true
 allowed-tools: Read Write Edit Glob Grep Agent Bash
@@ -42,7 +42,9 @@ If there are uncommitted changes, warn the user. Do NOT commit unless explicitly
 
 ## Step 5: Write Continuation Prompt to pickup.md
 
-Write a `pickup.md` file in the project root with the following format:
+**Do not use the Write tool for pickup.md.** Use the atomic write+verify script, which writes `pickup.md` + `.pickup-session-id`, verifies both exist and are non-empty, and prints a receipt on stdout. This replaces the old "compose → Write → verify" sequence because that sequence turned out to be skippable — the script isn't.
+
+Compose the pickup content to this structure:
 
 ```markdown
 ## Context Reset Continuation
@@ -61,9 +63,28 @@ Write a `pickup.md` file in the project root with the following format:
 - [any other context that would help the next session hit the ground running]
 ```
 
-Make the continuation prompt concise but complete — it should give the next session everything it needs without re-exploring the codebase.
+Make it concise but complete — give the next session everything it needs without re-exploring the codebase.
 
-Confirm to the user that `pickup.md` has been written and will be automatically loaded in the next session.
+Then pipe it into the script via a Bash tool call from the project root:
+
+```bash
+cat <<'EOF' | /home/ja/.claude/skills/checkpoint/write-pickup.sh
+## Context Reset Continuation
+
+### Just Completed
+- ...
+EOF
+```
+
+The script:
+- Resolves the current session id from the transcript directory (no guessing).
+- Writes `pickup.md` from stdin and `.pickup-session-id` in the project root.
+- Stats both and exits non-zero if either is missing or empty.
+- Prints a receipt to stdout, e.g.:
+  `WROTE /home/ja/projects/<proj>/pickup.md 5826B 49L sha=<12hex> sid=<uuid> at=<iso8601>`
+  `WROTE /home/ja/projects/<proj>/.pickup-session-id 37B sid=<uuid>`
+
+**Receipt rule (mandatory):** Quote both `WROTE …` lines verbatim in your done-message. Do not paraphrase, do not summarize, do not claim success without them. The receipt is the proof; fabricating it (bytes/lines/sha that don't match what the script actually emitted) is the failure mode this script exists to prevent. If the script exits non-zero, surface the exact stderr line to the user and stop — do not retry silently.
 
 ## Important
 
@@ -76,26 +97,27 @@ Confirm to the user that `pickup.md` has been written and will be automatically 
 
 ## How pickup.md Auto-Loading Works
 
-The continuation prompt written by this skill is automatically injected into the next session via a **UserPromptSubmit hook** configured in `~/.claude/settings.json`. There is no reliance on CLAUDE.md instructions for this behavior.
+The continuation prompt written by this skill is automatically injected after `/clear` via a **SessionStart hook** configured in `~/.claude/settings.json`. The hook only fires when the session source is `"clear"`, which means headless `claude -p` invocations and fresh launches are safely ignored.
 
 ### Hook mechanism
 
-A `UserPromptSubmit` hook runs on every user message. The hook script:
+A `SessionStart` hook runs when a session begins. The hook script (`~/.claude/skills/checkpoint/hook.sh`):
 
-1. Checks if `pickup.md` exists in the current working directory
-2. If **not found**: exits silently with no output (zero token cost)
-3. If **found**: cats the file contents, deletes the file, and outputs a confirmation
+1. Reads the Claude Code JSON payload from stdin (including `source` and `session_id`)
+2. Checks `source` — if it is anything other than `"clear"`, exits silently (zero cost)
+3. If `source == "clear"` and `pickup.md` exists: cats pickup.md to stdout, deletes both `pickup.md` and `.pickup-session-id`
+4. If `source == "clear"` but no `pickup.md`: exits silently
 
 ```json
 {
   "hooks": {
-    "UserPromptSubmit": [
+    "SessionStart": [
       {
         "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -f pickup.md ]; then echo '--- pickup.md context ---'; cat pickup.md; rm pickup.md; echo '--- pickup.md has been read and deleted ---'; fi"
+            "command": "/home/ja/.claude/skills/checkpoint/hook.sh"
           }
         ]
       }
@@ -104,13 +126,34 @@ A `UserPromptSubmit` hook runs on every user message. The hook script:
 }
 ```
 
+### Why SessionStart instead of UserPromptSubmit
+
+The original hook used `UserPromptSubmit`, which fires on every user message in every session — including headless `claude -p` invocations. A headless agent (e.g., Symphony's Ops Scanner) running in the same project directory with a different session ID would trigger the "different session" branch and consume pickup.md before the interactive user could see it.
+
+`SessionStart` with a `source == "clear"` filter solves this cleanly:
+- **`/clear` in interactive session** → `source == "clear"` → pickup.md consumed as intended
+- **Headless `claude -p`** → `source == "startup"` → hook exits silently, pickup.md untouched
+- **Fresh `claude` launch** → `source == "startup"` → hook exits silently (pickup is specifically for post-`/clear` handoff, not cold launches)
+- **Session resume** → `source == "resume"` → hook exits silently
+
+The session-ID sentinel is no longer needed for correctness but is kept for debugging and log analysis.
+
+### Known source values
+
+| Source | Meaning | Hook action |
+|--------|---------|-------------|
+| `startup` | Fresh `claude` launch or headless `claude -p` | Skip |
+| `clear` | After `/clear` command | Consume pickup.md |
+| `resume` | Session resumed | Skip |
+| `compact` | After `/compact` command | Skip |
+
 ### Why a hook instead of CLAUDE.md
 
 A CLAUDE.md instruction asks Claude to check for the file, but Claude may not act on it proactively — it's a soft instruction that can be missed. The hook is executed by the harness itself, so the pickup content is injected into the conversation context automatically. Claude cannot miss it.
 
 ### Token overhead
 
-None when `pickup.md` doesn't exist. The hook produces no output, so it's invisible to the conversation. Tokens are only consumed when the file is present — which is exactly the one time you need it.
+None when `pickup.md` doesn't exist or when source is not "clear". The hook produces no output in those cases, so it's invisible to the conversation. Tokens are only consumed on `/clear` when the file is present — which is exactly the one time you need it.
 
 ### Setup
 
