@@ -10,6 +10,9 @@ PROJECT_ROOT="$(pwd)"
 PICKUP="$PROJECT_ROOT/pickup.md"
 SENTINEL="$PROJECT_ROOT/.pickup-session-id"
 
+# Clean up any stale .tmp files from a previously-aborted run.
+trap 'rm -f "$PICKUP.tmp" "$SENTINEL.tmp"' EXIT
+
 PROJECT_HASH=$(echo "$PROJECT_ROOT" | tr '/' '-')
 TRANSCRIPT_DIR="${CLAUDE_DATA_DIR:-$HOME/.claude}/projects/$PROJECT_HASH"
 SID=$(ls -t "$TRANSCRIPT_DIR"/*.jsonl 2>/dev/null | head -1 | xargs -n1 basename 2>/dev/null | sed 's/\.jsonl$//' || true)
@@ -19,8 +22,15 @@ if [ -z "$SID" ]; then
   exit 2
 fi
 
-cat > "$PICKUP"
-printf '%s\n' "$SID" > "$SENTINEL"
+# Atomic write: stream to .tmp, then rename(2) into place. This ensures the
+# final file's mtime is only bumped when the full body is present on disk.
+# Symphony's !cpc orchestrator polls pickup.md mtime to detect freshness; a
+# direct `cat > "$PICKUP"` creates the target immediately and updates mtime
+# before stdin finishes streaming, exposing a partial-body race window.
+cat > "$PICKUP.tmp"
+mv "$PICKUP.tmp" "$PICKUP"
+printf '%s\n' "$SID" > "$SENTINEL.tmp"
+mv "$SENTINEL.tmp" "$SENTINEL"
 
 if [ ! -s "$PICKUP" ]; then
   echo "FAIL: pickup.md missing or empty at $PICKUP" >&2
