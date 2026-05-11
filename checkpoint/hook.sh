@@ -1,6 +1,7 @@
 #!/bin/bash
-# SessionStart hook: inject pickup.md only on source=="clear" (post-/clear).
-# Headless claude -p sessions fire source=="startup" and are safely ignored.
+# SessionStart hook: inject pickup.md whenever it exists.
+# Fires on both source=="clear" (CLI /clear) and source=="startup" (headless claude -p).
+# pickup.md is only written by /cp, so its presence is itself the consume signal.
 
 set -u
 PAYLOAD=$(cat)
@@ -18,17 +19,12 @@ LOG=/tmp/cp-hook.log
   [ -f .pickup-session-id ] && echo "saved_sid=$(cat .pickup-session-id)"
 } >> "$LOG" 2>&1
 
-if [ "$SOURCE" != "clear" ]; then
-  echo "branch=source-not-clear ($SOURCE) skip" >> "$LOG"
-  exit 0
-fi
-
 if [ -f pickup.md ]; then
-  echo "branch=clear+pickup cat+rm" >> "$LOG"
+  echo "branch=$SOURCE+pickup cat+rm" >> "$LOG"
   echo '--- pickup.md context ---'
   cat pickup.md
   rm -f pickup.md .pickup-session-id
   echo '--- pickup.md has been read and deleted ---'
 else
-  echo "branch=clear+no-pickup" >> "$LOG"
+  echo "branch=$SOURCE+no-pickup" >> "$LOG"
 fi
